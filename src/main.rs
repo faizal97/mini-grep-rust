@@ -1,29 +1,18 @@
 use std::env;
-use std::fs;
+use std::process;
 
-fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
-    let mut results = Vec::new();
-
-    for line in contents.lines() {
-        if line.contains(query) {
-            results.push(line);
-        }
-    }
-
-    results
-}
+use mini_grep_rust::Config;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let query = &args[1];
-    let file_path = &args[2];
+    let config = Config::build(&args.as_slice()).unwrap_or_else(|err| {
+        eprintln!("Problem parsing arguments: {}", err);
+        process::exit(1);
+    });
 
-    let contents = fs::read_to_string(file_path)
-        .expect("Should have been able to read the file");
-
-    println!("\nMatching lines:");
-    for line in search(query, &contents.as_str()) {
-        println!("{}", line);
+    if let Err(e) = mini_grep_rust::run(config) {
+        eprintln!("Application error: {}", e);
+        process::exit(1);
     }
 }
