@@ -13,6 +13,11 @@ fn main() {
 
     if let Err(e) = mini_grep_rust::run(config) {
         eprintln!("Application error: {}", e);
+
+        if e.to_string().contains("regex parse error") {
+            eprintln!("Hint: Check your regex pattern syntax");
+        }
+
         process::exit(1);
     }
 }

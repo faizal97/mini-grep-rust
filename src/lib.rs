@@ -1,3 +1,4 @@
+use regex::Regex;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -6,6 +7,7 @@ pub struct Config {
     pub query: String,
     pub file_path: String,
     pub ignore_case: bool,
+    pub use_regex: bool,
 }
 
 impl Config {
@@ -18,11 +20,13 @@ impl Config {
         let file_path = args[2].clone();
 
         let ignore_case = env::var("IGNORE_CASE").is_ok();
+        let use_regex = env::var("USE_REGEX").is_ok();
 
         Ok(Config {
             query,
             file_path,
             ignore_case,
+            use_regex,
         })
     }
 }
@@ -31,7 +35,9 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let contents = fs::read_to_string(config.file_path)?;
 
     let results = if config.ignore_case {
-        search_case_insesitive(&config.query, &contents)
+        search_case_insensitive(&config.query, &contents)
+    } else if config.use_regex {
+        search_with_regex(&config.query, &contents)?
     } else {
         search(&config.query, &contents)
     };
@@ -55,7 +61,7 @@ pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
     results
 }
 
-pub fn search_case_insesitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
     let query = query.to_lowercase();
     let mut results = Vec::new();
 
@@ -66,6 +72,22 @@ pub fn search_case_insesitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str
     }
 
     results
+}
+
+pub fn search_with_regex<'a>(
+    pattern: &str,
+    contents: &'a str,
+) -> Result<Vec<&'a str>, regex::Error> {
+    let re = Regex::new(pattern)?;
+    let mut results = Vec::new();
+
+    for line in contents.lines() {
+        if re.is_match(line) {
+            results.push(line);
+        }
+    }
+
+    Ok(results)
 }
 
 #[cfg(test)]
@@ -94,7 +116,7 @@ Trust me.";
 
         assert_eq!(
             vec!["Rust:", "Trust me."],
-            search_case_insesitive(query, contents)
+            search_case_insensitive(query, contents)
         );
     }
 
@@ -124,5 +146,20 @@ jumps over the lazy dog.
 The end.";
 
         assert_eq!(vec!["jumps over the lazy dog."], search(query, contents));
+    }
+
+    #[test]
+    fn regex_search() {
+        let pattern = r"\bnobody\b"; // Word boundary
+        let contents = "\
+I'm nobody! Who are you?
+Are you nobody, too?
+Somebody once told me.";
+
+        let result = search_with_regex(pattern, contents).unwrap();
+        assert_eq!(
+            vec!["I'm nobody! Who are you?", "Are you nobody, too?"],
+            result
+        );
     }
 }
