@@ -1,9 +1,11 @@
+use std::env;
 use std::error::Error;
 use std::fs;
 
 pub struct Config {
     pub query: String,
     pub file_path: String,
+    pub ignore_case: bool,
 }
 
 impl Config {
@@ -12,17 +14,29 @@ impl Config {
             return Err("Not enough arguments");
         }
 
-        let query =  args[1].clone();
+        let query = args[1].clone();
         let file_path = args[2].clone();
 
-        Ok(Config {query, file_path})
+        let ignore_case = env::var("IGNORE_CASE").is_ok();
+
+        Ok(Config {
+            query,
+            file_path,
+            ignore_case,
+        })
     }
 }
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let contents = fs::read_to_string(config.file_path)?;
 
-    for line in search(&config.query.as_str(), &contents) {
+    let results = if config.ignore_case {
+        search_case_insesitive(&config.query, &contents)
+    } else {
+        search(&config.query, &contents)
+    };
+
+    for line in results {
         println!("{}", line);
     }
 
@@ -39,4 +53,76 @@ pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
     }
 
     results
+}
+
+pub fn search_case_insesitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    let query = query.to_lowercase();
+    let mut results = Vec::new();
+
+    for line in contents.lines() {
+        if line.to_lowercase().contains(&query) {
+            results.push(line);
+        }
+    }
+
+    results
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_result() {
+        let query = "duct";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.";
+
+        assert_eq!(vec!["safe, fast, productive."], search(query, contents));
+    }
+
+    #[test]
+    fn case_insensitive() {
+        let query = "rUsT";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.
+Trust me.";
+
+        assert_eq!(
+            vec!["Rust:", "Trust me."],
+            search_case_insesitive(query, contents)
+        );
+    }
+
+    #[test]
+    fn empty_query() {
+        let query = "";
+        let contents = "Some text\nMore text";
+
+        assert_eq!(vec!["Some text", "More text"], search(query, contents));
+    }
+
+    #[test]
+    fn no_matches() {
+        let query = "xyz";
+        let contents = "Some text\nMore text";
+
+        let expected: Vec<&str> = vec![];
+        assert_eq!(expected, search(query, contents));
+    }
+
+    #[test]
+    fn multiple_matches() {
+        let query = "the";
+        let contents = "\
+The quick brown fox
+jumps over the lazy dog.
+The end.";
+
+        assert_eq!(vec!["jumps over the lazy dog."], search(query, contents));
+    }
 }
